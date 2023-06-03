@@ -1,5 +1,3 @@
-# This Python file uses the following encoding: utf-8
-
 from PyQt5 import QtCore, QtWidgets
 from PyQt5.QtGui import *
 import qtawesome
@@ -9,6 +7,7 @@ from File import *
 from Syntactic import *
 from ObjectCode import *
 import os
+
 
 class myUI(QtWidgets.QMainWindow):
     def __init__(self):
@@ -59,24 +58,24 @@ class myUI(QtWidgets.QMainWindow):
                 color:#ffffff;
                 border:none;
                 font-weight:600;
-                font-size:16px;
+                font-size:20px;
                 font-family:'微软雅黑';
             }
             QPushButton{
                 color:#ffffff;
                 border:none;
                 font-weight:600;
-                font-size:16px;
+                font-size:20px;
                 font-family:'微软雅黑';
              }
             ''')
         self.signOut.setStyleSheet(
             '''
-            QPushButton{ text-align:right;padding-right:30px;color:#C71682;font-size:16px;}
+            QPushButton{ text-align:right;padding-right:30px;color:#C71682;font-size:20px;}
             ''')
         self.title.setStyleSheet(
             '''
-            QLabel{ text-align:left;padding-left:30px;color:#C71682;font-size:16px;}
+            QLabel{ text-align:left;padding-left:30px;color:#C71682;font-size:20px;}
             ''')
 
     def init_ui_left(self):
@@ -141,7 +140,7 @@ class myUI(QtWidgets.QMainWindow):
         self.leftLayout3.setContentsMargins(0, 0, 0, 0)
         # 设置整个左侧的布局
         self.mainLayout.addWidget(self.leftWidget, 1, 0, 12, 3)  # 左侧部件在第1行第0列，占12行3列
-        #设置左侧部件的QSS
+        # 设置左侧部件的QSS
         self.leftWidget.setStyleSheet(
             '''
             *{background-color:#fafafa;}
@@ -365,7 +364,8 @@ class myUI(QtWidgets.QMainWindow):
         self.leftButton6.setEnabled(True)
 
         # 产生目标代码
-        self.ocg = ObjectCodeGenerator(self.ana.semantic.middleCode, self.ana.semantic.symbolTable, self.ana.semantic.funcTable)
+        self.ocg = ObjectCodeGenerator(self.ana.semantic.middleCode, self.ana.semantic.symbolTable,
+                                       self.ana.semantic.funcTable)
         self.ocg.genMips()
         self.mipsText = ''
         for code in self.ocg.mipsCode:
@@ -452,4 +452,3 @@ class myUI(QtWidgets.QMainWindow):
         # 填充目标代码
         self.objectCodeBox.setPlainText(self.mipsText)
         self.objectCodeBox.setReadOnly(True)
-

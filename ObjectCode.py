@@ -1,10 +1,9 @@
-# This Python file uses the following encoding: utf-8
-
 import copy
 import sys
 
+
 # 目标代码生成器
-class ObjectCodeGenerator():
+class ObjectCodeGenerator:
     def __init__(self, middleCode, symbolTable, funcTable):
         self.middleCode = copy.deepcopy(middleCode)
         self.symbolTable = copy.deepcopy(symbolTable)
@@ -12,14 +11,15 @@ class ObjectCodeGenerator():
         for f in funcTable:
             self.funcNameTable.append(f.name)
 
-        self.mipsCode = []
-        self.regTable = { '$' + str(i): '' for i in range(7, 26) }
-        self.varStatus = {}  # 记录变量是在寄存器当中还是内存当中
+        self.mipsCode = []  # 目标代码
+        self.regTable = {'$' + str(i): '' for i in range(7, 26)}  # 寄存器状态表
+        self.varStatus = {}  # 记录变量是在寄存器当中还是内存当中 变量状态表
 
         self.DATA_SEGMENT = 10010000
         self.STACK_OFFSET = 8000
         return
 
+    # 申请一个寄存器
     def getRegister(self, identifier, codes):
         if identifier[0] != 't':
             return identifier
@@ -90,6 +90,7 @@ class ObjectCodeGenerator():
 
         return
 
+    # 生成mips目标代码
     def genMips(self):
         mc = self.mipsCode
         dc = self.middleCode
@@ -97,16 +98,16 @@ class ObjectCodeGenerator():
         dc.insert(0, ('call', '_', '_', 'programEnd'))
         dc.insert(0, ('call', '_', '_', 'main'))
 
-        mc.append('.data') # 数据段 存放数组
+        mc.append('.data')  # 数据段 存放数组
         for s in self.symbolTable:
             if s.type == 'int array':
-                size = 4 # 单位字节
+                size = 4  # 单位字节
                 for dim in s.dims:
                     size *= int(dim)
                 mc.append('    ' + s.place + ': .space ' + str(size))
 
         mc.append('')
-        mc.append('.text') # 代码段
+        mc.append('.text')  # 代码段
         mc.append('    addiu $sp, $zero, 0x{}'.format(self.DATA_SEGMENT + self.STACK_OFFSET))
         mc.append('    or $fp, $sp, $zero')
 
@@ -125,23 +126,23 @@ class ObjectCodeGenerator():
                 dst = self.getRegister(code[3], dc)
                 mc.append('    add {},$zero,{}'.format(dst, src))
 
-            elif code[0] == '[]=': # []=, t21, _, t17[t22]
+            elif code[0] == '[]=':  # []=, t21, _, t17[t22]
                 src = self.getRegister(code[1], dc)
-                base = code[3][ : code[3].index('[')]
-                offset = code[3][code[3].index('[') + 1 : -1]
+                base = code[3][: code[3].index('[')]
+                offset = code[3][code[3].index('[') + 1: -1]
                 dst_offset = self.getRegister(offset, dc)
                 mc.append('    la $v1,{}'.format(base))
-                mc.append('    mul {},{},4'.format(dst_offset,dst_offset))
+                mc.append('    mul {},{},4'.format(dst_offset, dst_offset))
                 mc.append('    addu {},{},$v1'.format(dst_offset, dst_offset))
                 mc.append('    sw {},'.format(src) + '0({})'.format(dst_offset))
 
-            elif code[0] == '=[]': # =[], t17[t23], -, t24
+            elif code[0] == '=[]':  # =[], t17[t23], -, t24
                 dst = self.getRegister(code[3], dc)
-                base = code[1][ : code[1].index('[')]
-                offset = code[1][code[1].index('[') + 1 : -1]
+                base = code[1][: code[1].index('[')]
+                offset = code[1][code[1].index('[') + 1: -1]
                 src_offset = self.getRegister(offset, dc)
                 mc.append('    la $v1,{}'.format(base))
-                mc.append('    mul {},{},4'.format(src_offset,src_offset))
+                mc.append('    mul {},{},4'.format(src_offset, src_offset))
                 mc.append('    addu {},{},$v1'.format(src_offset, src_offset))
                 mc.append('    lw {},'.format(dst) + '0({})'.format(src_offset))
 
