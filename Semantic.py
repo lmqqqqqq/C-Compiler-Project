@@ -3,10 +3,11 @@ import sys
 
 
 # 语句块
+# 语法树结点类
 class Node:
     def __init__(self):
         self.place = None  # 语句块入口的中间变量
-        self.code = []  # 传递而来的或者生成的*中间代码*
+        self.code = []  # 传递而来的或者生成的中间代码
         self.stack = []  # 翻译闭包表达式所用的临时栈
 
         self.name = None  # 语句块的标识符
@@ -18,8 +19,8 @@ class Node:
 
         self.begin = None  # 循环入口
         self.end = None  # 循环出口
-        self.true = None  # 为真时的跳转位置
-        self.false = None  # 为假时的跳转位置
+        self.true = None  # 条件为真时的跳转位置
+        self.false = None  # 条件为假时的跳转位置
 
     def prtNode(self):
         print('Node name:', self.name, ',type:', self.type, ',data:', self.data, ',code:', self.code)
@@ -51,7 +52,7 @@ class FunctionSymbol:
 
 
 # 语义分析类
-class SemanticAnalyser():
+class SemanticAnalyser:
     def __init__(self):
         self.sStack = []  # 语义分析栈
         self.symbolTable = []  # 符号表    [s { name, function } ]
@@ -65,23 +66,23 @@ class SemanticAnalyser():
 
         # 把全局当作一个函数
         f = FunctionSymbol()
-        f.name = 'global'
-        f.label = 'global'
-        self.updateFuncTable(f)
-        self.curFuncSymbol = f
-        self.middleCode = []
+        f.name = 'global'  # 函数标识符
+        f.label = 'global'  # 函数入口处标签
+        self.updateFuncTable(f)  # 把全局函数加入函数表
+        self.curFuncSymbol = f  # 当前函数为global
+        self.middleCode = []  # 生成的中间代码
 
         self.semanticRst = True
         self.semanticErrMsg = "语义分析成功！"
         return
 
+    # 根据语义规则进行规约
     # prod: 规约时运用的产生式, shiftStr: 移进规约串
     def semanticAnalyze(self, prod, shiftStr):
         nt = prod.left
         r = prod.right
 
         # 主要分为说明、赋值、数组、布尔表达式、条件控制
-        # 注意实现数组的扁平化
 
         # print("产生式规约: ", prod.toString())
         # print("移进规约串: ", shiftStr)
@@ -91,22 +92,22 @@ class SemanticAnalyser():
         if nt == 'arrayDeclaration':
             if len(r) == 3:
                 n = Node()
-                n.name = nt
-                n.type = 'int array'
+                n.name = nt  # 语句块标识符
+                n.type = 'int array'  # 结点数据类型
                 n.dims = [int(shiftStr[-2]['data'])]  # 数组维度
-                self.sStack.append(n)
+                self.sStack.append(n)  # 将新的语法树结点加入语义分析栈
                 # self.prtNodeCode(n)
             elif len(r) == 4:
-                n = self.sStack.pop(-1)
+                n = self.sStack.pop(-1)  # 将语义分析栈中的语法树结点取出(arrayDeclaration)
                 n.name = nt
                 n.type = 'int array'
-                n.dims.insert(0, int(shiftStr[-3]['data']))  # 数组维度
+                n.dims.insert(0, int(shiftStr[-3]['data']))  # 数组维度 在首部加入
                 self.sStack.append(n)
                 # self.prtNodeCode(n)
 
         # array -> id [ expression ] | array [ expression ]
         if nt == 'array':
-            expression_n = self.sStack.pop(-1)
+            expression_n = self.sStack.pop(-1)  # 将语义分析栈中的语法树结点取出(expression)
             self.calExpression(expression_n)  # 计算表达式的值
             array_n = copy.deepcopy(self.sStack[-1])  # 深拷贝
 
@@ -114,7 +115,7 @@ class SemanticAnalyser():
                 self.sStack.pop(-1)
                 expression_n.name = 'array'
                 expression_n.arrname = array_n.arrname  # 数组原始变量名字
-                expression_n.position = copy.deepcopy(array_n.position)
+                expression_n.position = copy.deepcopy(array_n.position)  # 第一维符号元素在数组中的位置
                 expression_n.position.append(expression_n.place if expression_n.place else expression_n.data)
                 expression_n.place = array_n.place  # 数组对应的中间变量名字
                 expression_n.type = 'array'
@@ -131,19 +132,20 @@ class SemanticAnalyser():
                     self.semanticErrMsg = "未定义的数组变量：" + shiftStr[-4][
                         'data']  # 在" + str(shiftStr[-4]['row']) + "行" + str(shiftStr[-4]['colum']) + "列"
                     return
-                expression_n.position.append(expression_n.place if expression_n.place else expression_n.data)
+                expression_n.position.append(
+                    expression_n.place if expression_n.place else expression_n.data)  # 第一维符号元素在数组中的位置
                 expression_n.place = s  # 数组对应的中间变量
                 expression_n.type = 'array'
                 self.sStack.append(expression_n)
 
         # program -> declarationChain
         if nt == 'program':
-            n = self.sStack.pop(-1)
+            n = self.sStack.pop(-1)  # 语法树结点
             n.name = nt
 
             for node in n.stack:
                 for code in node.code:
-                    n.code.append(code)
+                    n.code.append(code)  # 将中间代码全部加入program结点
 
             self.middleCode = copy.deepcopy(n.code)
             self.sStack.append(n)
@@ -153,7 +155,7 @@ class SemanticAnalyser():
         # statement -> declaration | ifStatement | iterStatement | returnStatement | assignStatement
         elif nt in ['statement', 'block']:
             n = self.sStack.pop(-1)
-            n.name = nt
+            n.name = nt  # 仅改一下语句块标识符
             self.sStack.append(n)
             # self.prtNodeCode(n)
 
@@ -162,7 +164,7 @@ class SemanticAnalyser():
             n = Node()
             if len(r) == 2:  # declaration declarationChain
                 n = self.sStack.pop(-1)
-                n.stack.insert(0, self.sStack.pop(-1))
+                n.stack.insert(0, self.sStack.pop(-1))  # 将declaration插入栈底
             n.name = nt
             self.sStack.append(n)
             # self.prtNodeCode(n)
@@ -171,13 +173,13 @@ class SemanticAnalyser():
         elif nt == 'typeSpecifier':
             n = Node()
             n.name = nt
-            n.type = shiftStr[-1]['type']  # 拿到类型名
+            n.type = shiftStr[-1]['type']  # 数据类型名
             self.sStack.append(n)
 
         # declaration -> typeSpecifier id ; | completeFunction | typeSpecifier id arrayDeclaration ;
         elif nt == 'declaration':  # variable or function
             if len(r) == 3:  # -> typeSpecifier id ;
-                n = self.sStack.pop(-1)
+                n = self.sStack.pop(-1)  # typeSpecifier
                 n.name = nt
                 defType = n.type
                 defName = shiftStr[-2]['data']  # 变量名
@@ -188,17 +190,17 @@ class SemanticAnalyser():
                     self.semanticErrMsg = "变量重定义。"  # + str(shiftStr[-2]['row']) + "行" + str(shiftStr[-2]['colum']) + "列"
                     return
                 else:
-                    s = Symbol()
+                    s = Symbol()  # 生成新的一个符号
 
-                if n.place == None:
-                    s.name = defName
+                if n.place == None:  # 没有分配中间变量
+                    s.name = defName  # 语句块标识符
                     s.place = self.getNewTemp()
                     s.type = defType
                     s.function = self.curFuncSymbol.label
                     s.size = 4
                     s.offset = self.curOffset
                     self.curOffset += s.size
-                    self.updateSymbolTable(s)
+                    self.updateSymbolTable(s)  # 将新符号s加入符号表
 
                     if n.data is not None:  # 不是常数
                         code = (':=', n.data, '_', s.place)
@@ -216,8 +218,8 @@ class SemanticAnalyser():
                         n.code.stack.insert(0, code)
 
             if len(r) == 4:  # -> typeSpecifier id arrayDeclaration ;
-                array_n = self.sStack.pop(-1)
-                n = self.sStack.pop(-1)
+                array_n = self.sStack.pop(-1)  # arrayDeclaration
+                n = self.sStack.pop(-1)  # typeSpecifier
                 n.name = nt
                 defType = array_n.type
                 defName = shiftStr[-3]['data']  # 数组变量名
@@ -236,7 +238,7 @@ class SemanticAnalyser():
                     s.type = defType
                     s.function = self.curFuncSymbol.label
                     s.size = 4
-                    for ndim in array_n.dims:
+                    for ndim in array_n.dims:  # 数组维度
                         s.size *= ndim
                     s.dims = copy.deepcopy(array_n.dims)
                     s.offset = self.curOffset
@@ -285,7 +287,7 @@ class SemanticAnalyser():
             if len(nDefine.stack) > 0:
                 codeTmp.append(('-', 'fp', 4 * len(nDefine.stack), 'fp'))
 
-            for code in reversed(codeTmp):
+            for code in reversed(codeTmp):  # 栈先进后出
                 n.code.insert(0, code)
 
             code_end = n.code[-1]
@@ -305,7 +307,7 @@ class SemanticAnalyser():
             n.name = nt
             nFuncReturnType = self.sStack.pop(-1)  # typeSpecifier
             f = FunctionSymbol()  # 登记函数
-            f.name = shiftStr[-4]['data']
+            f.name = shiftStr[-4]['data']  # id
             f.type = nFuncReturnType.type
             if f.name == 'main':
                 f.label = 'main'
@@ -326,7 +328,7 @@ class SemanticAnalyser():
                 self.curOffset += s.size
                 self.updateSymbolTable(s)
 
-                f.params.append((arg.data, arg.type, arg.place))
+                f.params.append((arg.data, arg.type, arg.place))  # 新增函数中的形参
 
             n.data = f.label
             self.updateFuncTable(f)
@@ -387,13 +389,13 @@ class SemanticAnalyser():
                 self.calExpression(n)
 
                 s = self.findSymbol(id, self.curFuncSymbol.label)
-                if s == None:
+                if s is None:
                     print("使用未定义变量！")
                     self.semanticRst = False
                     self.semanticErrMsg = "使用未定义变量。"  # + str(shiftStr[-4]['row']) + "行" + str(shiftStr[-4]['colum']) + "列"
                     return
 
-                if s.type != n.type:
+                if s.type != n.type:  # 数据类型不一致
                     token = shiftStr[-4]
                     self.semanticRst = False
                     self.semanticErrMsg = "赋值时变量类型错误" + token[
@@ -402,7 +404,7 @@ class SemanticAnalyser():
 
                 sys.stdout.flush()
                 code = None
-                if n.place != None:  # a = 1;不存在n.place
+                if n.place is not None:  # a = 1;不存在n.place
                     code = (':=', n.place, '_', s.place)
                 else:
                     code = (':=', n.data, '_', s.place)
@@ -423,7 +425,7 @@ class SemanticAnalyser():
                 # self.prtNodeStack(n)
 
                 s = self.findSymbol(array_name, self.curFuncSymbol.label)
-                if s == None:
+                if s is None:
                     print("使用未定义的数组变量！")
                     self.semanticRst = False
                     self.semanticErrMsg = "使用未定义的数组变量！" + array_name
@@ -437,11 +439,11 @@ class SemanticAnalyser():
                     n.code.append(('*', str(array_n.position[0]), str(s.dims[1]), t_offset))
                     n.code.append(('+', t_offset, str(array_n.position[1]), t_offset))
 
-                if n.place != None:
+                if n.place is not None:
                     code = ('[]=', n.place, '_', s.place + '[' + t_offset + ']')
                 else:
                     t = self.getNewTemp()
-                    code = (':=', n.data, '_', t)
+                    code = (':=', n.data, '_', t)  # 先将值赋给一个中间变量
                     n.code.append(code)
                     code = ('[]=', t, '_', s.place + '[' + t_offset + ']')
                 n.code.append(code)
@@ -469,7 +471,7 @@ class SemanticAnalyser():
                 n = Node()
                 n.type = r[0]['type']
 
-            n.code.append((n.type, '_', '_', '_'))
+            n.code.append((n.type, '_', '_', '_'))  # return
             n.name = nt
             self.sStack.append(n)
             # self.prtNodeCode(n)
@@ -478,10 +480,10 @@ class SemanticAnalyser():
         elif nt == 'expression':
             n = None
             if len(r) == 1:  # expression -> primaryExpression
-                n = copy.deepcopy(self.sStack[-1])
+                n = copy.deepcopy(self.sStack[-1])  # primaryExpression
                 # self.prtNodeStack(n)
                 sys.stdout.flush()
-                n.stack.insert(0, self.sStack.pop(-1))
+                n.stack.insert(0, self.sStack.pop(-1))  # primaryExpression
 
             elif len(r) == 3:  # expression -> primaryExpression operator expression
                 n = copy.deepcopy(self.sStack.pop(-1))  # expression
@@ -496,20 +498,19 @@ class SemanticAnalyser():
         # primaryExpression -> num | ( expression ) | id ( actualParaList ) | id | array
         elif nt == 'primaryExpression':
             n = Node()
-            if len(r) == 1 and r[0]['type'] == 'INT':
+            if len(r) == 1 and r[0]['type'] == 'INT':  # num
                 n.data = shiftStr[-1]['data']  # 具体数字
-                n.type = shiftStr[-1]['type'].lower()
+                n.type = shiftStr[-1]['type'].lower()  # int
 
             # id ( actualParaList )
             elif len(r) == 4 and r[0]['type'] == 'IDENTIFIER':  # 找定义过的
                 function = self.findFuncSymbolByName(shiftStr[-4]['data'])
                 n = self.sStack.pop(-1)  # actualParaList
                 n.name = nt
-                if function == None:
+                if function is None:
                     print('使用未定义的函数!')
                     self.semanticRst = False
-                    self.semanticErrMsg = "未定义的函数：" + shiftStr[-4][
-                        'data']  # + "，在" + str(shiftStr[-4]['row']) + "行" + str(shiftStr[-4]['colum']) + "列"
+                    self.semanticErrMsg = "未定义的函数：" + shiftStr[-4]['data']
                     return
 
                 # print('测试过程调用: ', len(function.params), len(n.stack))
@@ -517,16 +518,15 @@ class SemanticAnalyser():
                     print('实参和形参个数不匹配!')
                     sys.stdout.flush()
                     self.semanticRst = False
-                    self.semanticErrMsg = "实参和形参个数不匹配：" + shiftStr[-4][
-                        'data']  # + "，在" + str(shiftStr[-4]['row']) + "行" + str(shiftStr[-4]['colum']) + "列"
+                    self.semanticErrMsg = "实参和形参个数不匹配：" + shiftStr[-4]['data']
                     return
 
                 code_temp = []
                 symbol_temp_list = copy.deepcopy(self.curFuncSymbol.params)  # 获取调用函数参数
-                code_temp.append(('-', 'sp', 4 * len(symbol_temp_list) + 4, 'sp'))  # 注意+4给ra留空间
-                code_temp.append(('store', '_', 4 * len(symbol_temp_list), 'ra'))  # 保存ra的值避免复写
+                code_temp.append(('-', 'sp', 4 * len(symbol_temp_list) + 4, 'sp'))  # 注意+4给ra留空间 ra子程序返回地址
+                code_temp.append(('store', '_', 4 * len(symbol_temp_list), 'ra'))  # 保存ra的值避免复写,把ra的值存放到mem[sp+4 * len(symbol_temp_list)]
                 for symbol in symbol_temp_list:  # 保存变量 因为是值传递，这里都还是t1
-                    code_temp.append(('store', '_', 4 * symbol_temp_list.index(symbol), symbol[2]))
+                    code_temp.append(('store', '_', 4 * symbol_temp_list.index(symbol), symbol[2]))  # symbol[2]是place
                 for code in reversed(code_temp):
                     n.code.insert(0, code)
 
@@ -534,28 +534,28 @@ class SemanticAnalyser():
                     n.code.append(('+', 'fp', 4 * len(function.params), 'fp'))  # 被调用函数
 
                 for node in n.stack:  # 实参列表
-                    if node.place != None:
+                    if node.place is not None:  # 有分配中间变量
                         node_result = node.place
                     else:
                         node_result = node.data
-                    n.code.append(('push', '_', 4 * n.stack.index(node), node_result))
+                    n.code.append(('push', '_', 4 * n.stack.index(node), node_result))  # 把node_result的值存放到mem[fp+4 * n.stack.index(node)]
                 n.code.append(('call', '_', '_', function.label))
 
                 symbol_temp_list.reverse()
                 for symbol in symbol_temp_list:
                     n.code.append(('load', '_', 4 * symbol_temp_list.index(symbol), symbol[2]))  # n.place = symbol[2]
-                n.code.append(('load', '_', 4 * len(symbol_temp_list), 'ra'))
+                n.code.append(('load', '_', 4 * len(symbol_temp_list), 'ra'))  # mem[sp+4 * len(symbol_temp_list)] -> ra
                 n.code.append(('+', 'sp', 4 * len(self.curFuncSymbol.params) + 4, 'sp'))
 
                 n.place = self.getNewTemp()
-                n.code.append((':=', 'v0', '_', n.place))
+                n.code.append((':=', 'v0', '_', n.place))  # 返回值赋给n
                 # ! 关键！保证primary的stack是空的 express里的stack的node个数必为2n + 1
                 n.stack = []
 
-            elif len(r) == 1 and r[0]['type'] == 'IDENTIFIER':
+            elif len(r) == 1 and r[0]['type'] == 'IDENTIFIER':  # id
                 n.data = shiftStr[-1]['data']  # 拿到变量名称
                 nTmp = self.findSymbol(n.data, self.curFuncSymbol.label)
-                if nTmp == None:
+                if nTmp is None:
                     print('使用未定义变量!')
                     self.semanticRst = False
                     self.semanticErrMsg = "未定义的变量：" + shiftStr[-1][
@@ -572,7 +572,7 @@ class SemanticAnalyser():
             else:  # -> array
                 n = self.sStack.pop(-1)
                 nTmp = self.findSymbol(n.arrname, self.curFuncSymbol.label)
-                if nTmp == None:
+                if nTmp is None:
                     print('使用未定义数组变量!')
                     self.semanticRst = False
                     self.semanticErrMsg = "未定义的数组变量！" + n.arrname
@@ -589,7 +589,7 @@ class SemanticAnalyser():
                 n.code.append(('=[]', nTmp.place + '[' + t_offset + ']', '-', t))
                 n.type = 'int'
                 n.place = t
-                n.stack = []
+                n.stack = []  # 栈清空
 
             n.name = nt
             self.sStack.append(n)
@@ -643,12 +643,12 @@ class SemanticAnalyser():
                 nExp = self.sStack.pop(-1)
                 self.calExpression(nExp)
                 n.code.extend(nExp.code)
-                n.code.append(('j>', nExp.place, '0', n.true))
-                n.code.append(('j', '_', '_', n.end))
-                n.code.append((n.true, ':', '_', '_'))
-                for code in nT.code:
+                n.code.append(('j>', nExp.place, '0', n.true))  # expression成立
+                n.code.append(('j', '_', '_', n.end))  # expression不成立
+                n.code.append((n.true, ':', '_', '_'))  # 下一句开始true的代码
+                for code in nT.code:  # true时的code
                     n.code.append(code)
-                n.code.append((n.end, ':', '_', '_'))
+                n.code.append((n.end, ':', '_', '_'))  # 循环出口
 
             # if ( expression ) block else block
             elif len(r) == 7:
@@ -665,11 +665,11 @@ class SemanticAnalyser():
                 n.code.append(('j>', nExp.place, '0', n.true))
                 n.code.append(('j', '_', '_', n.false))
                 n.code.append((n.true, ':', '_', '_'))
-                for code in nT.code:
+                for code in nT.code:  # true的code
                     n.code.append(code)
-                n.code.append(('j', '_', '_', n.end))
+                n.code.append(('j', '_', '_', n.end))  # true的code结束转向出口
                 n.code.append((n.false, ':', '_', '_'))
-                for code in nF.code:
+                for code in nF.code:  # false的code
                     n.code.append(code)
                 n.code.append((n.end, ':', '_', '_'))
 
@@ -685,8 +685,8 @@ class SemanticAnalyser():
             n.end = self.getNewLabel()
 
             if r[0]['type'] == 'while':
-                statement = self.sStack.pop(-1)
-                expression = self.sStack.pop(-1)
+                statement = self.sStack.pop(-1)  # block
+                expression = self.sStack.pop(-1)  # expression
                 self.calExpression(expression)
                 n.code.append((n.begin, ':', '_', '_'))
                 for code in expression.code:
@@ -716,7 +716,7 @@ class SemanticAnalyser():
     # 在符号表里查找符号
     def findSymbol(self, name, function):
         for s in self.symbolTable:
-            if s.name == name and s.function == function:
+            if s.name == name and s.function == function:  # 同一个函数内的同一个符号
                 return s
         return None
 
@@ -739,27 +739,31 @@ class SemanticAnalyser():
     # 更新函数表
     def updateFuncTable(self, functionSymbol):
         for f in self.funcTable:
-            if f.name == functionSymbol.name:
+            if f.name == functionSymbol.name:  # 函数名相同
                 self.funcTable.remove(f)
                 break
         self.funcTable.append(functionSymbol)
         return
 
+    # 获得新的结点
     def getNewTemp(self):
-        self.curTempId += 1
+        self.curTempId += 1  # 中间变量名
         return "t" + str(self.curTempId)
 
+    # 获得新的标签
     def getNewLabel(self):
-        self.curLabelId += 1
+        self.curLabelId += 1  # 当前 label 入口序号
         return 'l' + str(self.curLabelId)
 
+    # 获得新的函数标签
     def getNewFuncLabel(self):
-        self.curFuncId += 1
+        self.curFuncId += 1  # 当前 function 序号
         return 'f' + str(self.curFuncId)
 
+    # 生成代码emit
     # 对于 expression 节点 n, 生成对应代码, 放在属性 code 里
     def calExpression(self, n):
-        if len(n.stack) == 1:  # 只有一个值 不用三元计算
+        if len(n.stack) == 1:  # 只有一个值 不用三元计算 stack是翻译闭包表达式所用的临时栈
             n = copy.deepcopy(n.stack[0])
             # self.prtNodeCode(n)
             n.stack = []
@@ -770,41 +774,42 @@ class SemanticAnalyser():
         # self.prtNodeStack(n)
         sys.stdout.flush()
 
-        nLeft = n.stack.pop(0)
+        nLeft = n.stack.pop(0)  # 新的node
         while len(n.stack) > 0:
             nOp = n.stack.pop(0)
             nRight = n.stack.pop(0)
 
-            if nLeft.place == None:  # 说明是一个常数
-                arg1 = nLeft.data
+            if nLeft.place is None:  # 说明是一个常数
+                arg1 = nLeft.data  # arg1常数
             else:
-                arg1 = nLeft.place
+                arg1 = nLeft.place  # arg1是中间变量
 
-            if nRight.place == None:  # 说明是一个常数
-                arg2 = nRight.data
+            if nRight.place is None:  # 说明是一个常数
+                arg2 = nRight.data  # arg1常数
             else:
-                arg2 = nRight.place
+                arg2 = nRight.place  # arg1是中间变量
 
             if len(nLeft.code) > 0:
                 for code in nLeft.code:
-                    n.code.append(code)
+                    n.code.append(code)  # 加入arg1的code
 
             if len(nRight.code) > 0:
                 for code in nRight.code:
-                    n.code.append(code)
+                    n.code.append(code)  # 加入arg2的code
 
             nRst = Node()
             nRst.name = None  # 不需要名字
             nRst.place = self.getNewTemp()  # 中间变量
-            nRst.type = nRight.type
+            nRst.type = nRight.type  # 数据类型
             code = (nOp.type, arg1, arg2, nRst.place)
             n.code.append(code)
 
             nLeft = nRst
             n.type = nRight.type
-        n.place = n.code[-1][3]  # code的place位置
+        n.place = n.code[-1][3]  # expression的中间变量名
         return True
 
+    # 将中间代码保存到文件中
     def saveMidCodeToFile(self):
         text = ''
         for code in self.middleCode:

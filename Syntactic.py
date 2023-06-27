@@ -90,14 +90,14 @@ class SyntacticAnalyzer:
     # 分析语句
     def isRecognizable(self, originCode):
         inputStr = []  # 输入串
-        inputStr += self.lex.getTokensOfOneLine(originCode)
+        inputStr += self.lex.getTokensOfOneLine(originCode)  # 一行源代码
         sys.stdout.flush()
         stateStack = []  # 栈内状态序列
         shiftStr = []  # 移进规约串
         self.parseRst = []  # 记录步骤
 
         # 开始
-        wallSymbol = {'class': 'T', 'type': '#'}
+        wallSymbol = {'class': 'T', 'type': '#'}  # 规约的起始符
         shiftStr.append(wallSymbol)
         stateStack.append('s0')
         X = inputStr[0]  # X为当前单词
@@ -105,7 +105,7 @@ class SyntacticAnalyzer:
         while True:
             if len(inputStr) <= 2:
                 tmpInputStr = self.lex.getTokensOfOneLine(originCode)
-                if len(tmpInputStr) == 0:
+                if len(tmpInputStr) == 0:  # 源代码结束
                     inputStr.append(wallSymbol)
                 else:
                     inputStr += tmpInputStr
@@ -129,8 +129,8 @@ class SyntacticAnalyzer:
                 X = inputStr[0]
 
             elif act == 'reduce':  # 规约操作
-                prodIdx = int(target)
-                prod = self.prods[prodIdx]
+                prodIdx = int(target)  # 产生式序号
+                prod = self.prods[prodIdx]  # 根据序号找到对应的产生式
                 self.semantic.semanticAnalyze(prod, shiftStr)
                 if not self.semantic.semanticRst:
                     return False
@@ -139,16 +139,16 @@ class SyntacticAnalyzer:
                 stateLen = len(stateStack)
 
                 if rightLen == 1 and prod.right[0]['type'] == '$':
-                    # 是空串, 有问题
-                    dst = self.M[stateStack[-1]][prod.left].split(' ')[1]
+                    # 是空串, 有问题, stateStack和shiftStr在这个分支中就处理好
+                    dst = self.M[stateStack[-1]][prod.left].split(' ')[1]  # 因为是空串，没有pop，还是-1
                     stateStack.append(dst)
                     shiftStr.append({'class': 'NT', 'type': prod.left})
                     X = inputStr[0]
 
                 else:  # 不是空串
-                    stateStack = stateStack[0: stateLen - rightLen]
-                    shiftStr = shiftStr[0: stateLen - rightLen]
-                    X = {'class': 'NT', 'type': prod.left}
+                    stateStack = stateStack[0: stateLen - rightLen]  # 出栈
+                    shiftStr = shiftStr[0: stateLen - rightLen]     # 出栈
+                    X = {'class': 'NT', 'type': prod.left}  # 产生式的左边
 
             elif act == 'acc':  # 接受操作
                 self.semantic.semanticAnalyze(self.prods[1], shiftStr)
