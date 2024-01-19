@@ -503,6 +503,106 @@ During the process of register allocation, the following principles are consider
 The register allocation algorithm is as follows (assuming the intermediate code is in the form A := B op C):
 
 1. If the current value of B is in a register R<sub>i</sub>, where RVALUE[R<sub>i</sub>] only contains B, and either B and A are the same identifier or the current value of B will not be referenced after executing the quadruple A := B op C, select R<sub>i</sub> as the required register R and proceed to step 4.
-2. If there are still unallocated registers, choose one (R_i) as the required register R and proceed to step 4.
-3. Choose a register R_i from the already allocated registers as the required register R. It is preferable to select R_i such that the variable occupying R_i has its value also stored in the variable's storage location or will not be referenced in the basic block until the distant future.
-4. Generate store instructions for the variables in R_i: If the address descriptor array AVALUE[V] for variable V indicates that V is also stored outside of register R, no store instruction is needed. If V is equal to A and not equal to B or C, no store instruction is needed. If V will not be used after this point, no store instruction is needed. Otherwise, generate the target code `ST R_i, V`.
+2. If there are still unallocated registers, choose one R<sub>i</sub> as the required register R and proceed to step 4.
+3. Choose a register R<sub>i</sub> from the already allocated registers as the required register R. It is preferable to select R<sub>i</sub> such that the variable occupying R<sub>i</sub> has its value also stored in the variable's storage location or will not be referenced in the basic block until the distant future.
+4. Generate store instructions for the variables in R<sub>i</sub>: If the address array AVALUE[V] for variable V indicates that V is also stored outside of register R, no store instruction is needed. If V is equal to A and not equal to B or C, no store instruction is needed. If V will not be used after this point, no store instruction is needed. Otherwise, generate the target code.
+
+```python
+def getRegister(self, identifier, codes):
+    if identifier[0] != 't':
+        return identifier
+    if identifier in self.varStatus and self.varStatus[identifier] == 'reg':
+        for key in self.regTable:
+            if self.regTable[key] == identifier:
+                return key
+    # print('---------------')
+    # print(identifier + '正在申请寄存器')
+    # print(self.regTable)
+    # print(self.varStatus)
+
+    while True:
+        for key in self.regTable:
+            if self.regTable[key] == '':
+                self.regTable[key] = identifier
+                self.varStatus[identifier] = 'reg'
+                return key
+        self.freeRegister(codes)
+
+# 释放一个寄存器
+def freeRegister(self, codes):
+    # 提取出使用了 reg 的变量, 形式如t1, t2, ...
+    varRegUsed = list(filter(lambda x: x != '', self.regTable.values()))
+
+    # 统计这些变量后续的使用情况
+    varUsageCnts = {}
+    for code in codes:
+        # print(code)
+        for item in code:
+            # print(item)
+            tmp = str(item)
+            if tmp[0] == 't':  # 是个变量
+                if tmp in varRegUsed:
+                    if tmp in varUsageCnts:
+                        varUsageCnts[tmp] += 1
+                    else:
+                        varUsageCnts[tmp] = 1
+
+    # print('===\n', 'varUsageCnts:', varUsageCnts, '\n===\n')
+
+    sys.stdout.flush()
+    flag = False
+
+    # 找出之后不会使用的变量所在的寄存器
+    for var in varRegUsed:
+        if var not in varUsageCnts:
+            for reg in self.regTable:
+                if self.regTable[reg] == var:
+                    self.regTable[reg] = ''
+                    self.varStatus[var] = 'memory'
+                    flag = True
+    if flag:
+        return
+
+    # 释放最少使用的寄存器，
+    sorted(varUsageCnts.items(), key=lambda x: x[1])
+    varFreed = list(varUsageCnts.keys())[0]
+    for reg in self.regTable:
+        if self.regTable[reg] == varFreed:
+            for item in self.symbolTable:
+                if item.place == varFreed:  # t1, t2, ...
+                    self.mipsCode.append('addi $at, $zero, 0x{}'.format(self.DATA_SEGMENT))
+                    self.mipsCode.append('sw {}, {}($at)'.format(reg, item.offset))
+                    self.regTable[reg] = ''
+                    self.varStatus[varFreed] = 'memory'
+                    return
+
+```
+
+#### 3.4.2 Generate Assembly Code
+
+The assembly code generation algorithm is as follows:
+
+For each quadruple i: A := B op C, perform the following steps:
+
+1. Call the function getReg with the quadruple i: A := B op C as a parameter, and obtain a register R to be used for storing A.
+
+2. Determine the storage locations B' and C' for the current values of B and C using AVALUE[B] and AVALUE[C]. If their current values are in registers, take those registers as B' and C'.
+
+3. If B' is not equal to R, generate the target code:
+
+   ```assembly
+   LD  R, B'
+   OP  R, C'
+   ```
+
+   Otherwise, generate the target code 
+
+   ```assembly
+   OP R, C'
+   ```
+
+   If B' or C' is equal to R, remove R from AVALUE[B] or AVALUE[C].
+
+4. Set AVALUE[A] = {R} and RVALUE[R] = {A}.
+
+5. If the current values of B or C are not referenced in the basic block after this point, are not live variables after the basic block exit, and their current values are in some register R<sub>k</sub>, then remove B or C from RVALUE[R<sub>k</sub>] and R<sub>k</sub> from AVALUE[B] or AVALUE[C], ensuring that the register is no longer occupied by B or C.
