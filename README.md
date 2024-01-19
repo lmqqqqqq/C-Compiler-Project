@@ -277,11 +277,11 @@ After calculating the first set for a single non-terminal (NT), you can use thes
 
 After calculating the first set for all terminals (T) and non-terminals (NT), you can use this result to compute the first set for a string, which is the ultimate goal.
 
-#### 3.3.2 LR0 items
+#### 3.2.2 LR0 Items
 
 Before constructing the DFA, it is necessary to add a dot to the productions to transform them into LR0 item sets. Adding a dot to a production is essentially indicating the position of the dot on the right-hand side of the production.
 
-#### 3.3.3 closure of LR1 item sets
+#### 3.2.3 Closure of LR1 Item Sets
 
 The construction of the closure of LR1 item sets is crucial for generating the DFA. The algorithm for computing the closure is as follows:
 
@@ -321,4 +321,188 @@ def getLR1Closure(self, I):
 
 ```
 
-#### **3.3.4** DFA
+#### **3.2.4** DFA
+
+In the process of calculating the canonical collection of LR1 items, a state transition function `GO` is generated. This function indicates, for a given DFA state, the state to which it transitions when encountering a certain symbol.
+
+Given the ability to compute the closure of LR1 item sets and implement the state transition function `GO`, the construction of the DFA is achieved by starting from the closure of the initial state. Repeatedly invoke the `GO` function to generate new item sets and compute their closures, continuing this process until no new item sets are generated. This completes the construction of the DFA.
+
+```python
+def buildFamily(self):
+    iS = self.itemSets  # DFA不同的状态
+    startI = []
+    startI.append(self.itemPool[0])  # 添加起始项目
+    iS.append(ItemSet('s0', self.getLR1Closure([startI[0]] + self.extendItem(startI[0]))))  # 起始项目集
+
+    setCnt = 1
+    setStrings = {}
+    setStrings['s0'] = iS[0].toString()  # dot被去掉了,并加了\n分隔项目
+    edgeStrings = []
+
+    while True:
+        isBigger = 0  # 是否有加新边或者状态
+        for I in iS:  # 遍历当前的所有项目集
+            for X in self.symbols:  # 遍历所有的字符(非终结符和终结符)
+                rstGO = self.GO(I, X)  # 生成了一个新的项目集
+                if len(rstGO) == 0:
+                    continue
+                tempItemSet = ItemSet('s' + str(setCnt), rstGO)  # 新的项目集
+
+                if tempItemSet.toString() in setStrings.values():  # 新生成的项目集已经存在了
+                    tempItemSet.name = list(setStrings.keys())[list(setStrings.values()).index(tempItemSet.toString())]
+                else:
+                    setStrings[tempItemSet.name] = tempItemSet.toString()
+                    iS.append(tempItemSet)  # 添加新的项目集
+                    isBigger = 1
+                    setCnt = setCnt + 1
+
+                tempEdge = {'start': I.name, 'symbol': X, 'end': tempItemSet.name}
+                tempEdgeStr = tempEdge['start'] + '->' + tempEdge['symbol'] + '->' + tempEdge['end']
+
+                if tempEdgeStr not in edgeStrings:
+                    self.edges.append(tempEdge)
+                    edgeStrings.append(tempEdgeStr)
+                    isBigger = 1
+        if isBigger == 0:
+            break
+    return
+
+```
+
+#### 3.2.5 LR1 Parsing Table
+
+The essence of the LR1 parsing table is to establish the ACTION and GOTO tables based on the generated DFA, describing the actions (shift, reduce, accept, error) to be taken when encountering the next input character in the current state, as well as the next state.
+
+The algorithm for constructing the LR1 parsing table is as follows:
+
+1. If the item [A→α⋅aβ, b] belongs to I<sub>k</sub> and GO(I<sub>k</sub>, a) = I<sub>j</sub>, where a is a terminal, set ACTION[k, a] to s<sub>j</sub>, meaning shift to state j with symbol a.
+2. If the item [A→α⋅, a] belongs to I<sub>k</sub>, set ACTION[k, a] to r<sub>j</sub>, meaning reduce with production A→α using the j-th production.
+3. If the item [S'→S⋅,#] belongs to I<sub>k</sub>, set ACTION[k, #] to acc, meaning accept.
+4. If GO(I<sub>k</sub>, A) = I<sub>j</sub>, set GOTO[k, A] to j, meaning go to state j with non-terminal A.
+5. For other cases where the above rules do not apply, fill in with error, indicating an error.
+
+```python
+def getTables(self):
+    self.rst = []
+    for e in self.edges:
+        if e['symbol'] in self.TerminalSymbols:  # symbol是终结符，构建ACTION表
+            self.M[e['start']][e['symbol']] = 'shift ' + e['end']
+
+        if e['symbol'] in self.NonTerminalSymbols:  # symbol是非终结符，构建GOTO表
+            self.M[e['start']][e['symbol']] = 'goto ' + e['end']
+
+    for I in self.itemSets:
+        for item in I.items:
+            if item.dotPos == len(item.right):  # dot在最后,要规约了
+                if item.left == self.OriginStartSymbol and item.terms[0] == '#':
+                    if self.M[I.name][item.terms[0]] != ' ':
+                        print('LR(1)分析表有多重入口！')
+                    self.M[I.name][item.terms[0]] = 'acc'
+                else:
+                    if self.M[I.name][item.terms[0]] != ' ':
+                        print('LR(1)分析表有多重入口！')
+                    self.M[I.name][item.terms[0]] = 'reduce ' + str(self.item2prodIdx(item))
+                continue
+
+            if len(item.right) == 1 and item.right[0]['type'] == '$':
+                if item.left == self.OriginStartSymbol and item.terms[0] == '#':
+                    if self.M[I.name][item.terms[0]] != ' ':
+                        print('LR(1)分析表有多重入口！')
+                    self.M[I.name][item.terms[0]] = 'acc'
+                else:
+                    if self.M[I.name][item.terms[0]] != ' ':
+                        print('LR(1)分析表有多重入口！')
+                    self.M[I.name][item.terms[0]] = 'reduce ' + str(self.item2prodIdx(item))
+                continue
+    return
+
+```
+
+#### 3.2.6 Token Stream Reduction
+
+With the GOTO table and ACTION table, for a given state and the result of lexical analysis, we only need to consult the tables to determine the next action.
+
+The specific process is as follows:
+
+1. Read a symbol from the lexical analysis result.
+2. Look up the tables to determine the next action:
+   - If it is a shift, push the current symbol and the state to which it should be shifted onto the stack.
+   - If it is an accept action, end the reduction process.
+   - If it is a reduce action, determine which production to use for reduction. Pop symbols from the stack based on the number of symbols on the right-hand side of the production. Then, based on the current symbol and the top state on the stack, consult the GOTO table for the next state.
+   - If the table lookup for the current state and symbol does not yield a valid action, report an error.
+
+Continue this process until the grammar's start symbol is obtained through reduction.
+
+### 3.3 Semantic Analyzer
+
+During syntax analysis, semantic rules are calculated simultaneously without the need to explicitly construct a syntax tree. In bottom-up syntax analysis, when a production is used for reduction, the corresponding semantic rules are calculated, completing the semantic analysis and code generation tasks.
+
+```python
+if nt == 'arrayDeclaration':
+    if len(r) == 3:
+        n = Node()
+        n.name = nt
+        n.type = 'int array'
+        n.dims = [int(shiftStr[-2]['data'])]  # 数组维度
+        self.sStack.append(n)
+        # self.prtNodeCode(n)
+    elif len(r) == 4:
+        n = self.sStack.pop(-1)
+        n.name = nt
+        n.type = 'int array'
+        n.dims.insert(0, int(shiftStr[-3]['data']))  # 数组维度
+        self.sStack.append(n)
+        # self.prtNodeCode(n)
+
+# array -> id [ expression ] | array [ expression ]
+if nt == 'array':
+    expression_n = self.sStack.pop(-1)
+    self.calExpression(expression_n)  # 计算表达式的值
+    array_n = copy.deepcopy(self.sStack[-1])  # 深拷贝
+
+    if shiftStr[-4]['type'] == 'array':  # -> array [ expression ]
+        self.sStack.pop(-1)
+        expression_n.name = 'array'
+        expression_n.arrname = array_n.arrname  # 数组原始变量名字
+        expression_n.position = copy.deepcopy(array_n.position)
+        expression_n.position.append(expression_n.place if expression_n.place else expression_n.data)
+        expression_n.place = array_n.place  # 数组对应的中间变量名字
+        expression_n.type = 'array'
+        self.sStack.append(expression_n)
+
+    else:  # -> id [ expression ]
+        expression_n.name = 'array'
+        expression_n.arrname = shiftStr[-4]['data']
+        s = shiftStr[-4]['data']  # 拿到变量名称
+        nTmp = self.findSymbol(s, self.curFuncSymbol.label)  # python 可变对象传引用
+        if nTmp == None:
+            print('使用未定义的数组变量!')
+            self.semanticRst = False
+            self.semanticErrMsg = "未定义的数组变量：" + shiftStr[-4][
+                'data']  # 在" + str(shiftStr[-4]['row']) + "行" + str(shiftStr[-4]['colum']) + "列"
+            return
+        expression_n.position.append(expression_n.place if expression_n.place else expression_n.data)
+        expression_n.place = s  # 数组对应的中间变量
+        expression_n.type = 'array'
+        self.sStack.append(expression_n)
+
+```
+
+### 3.4 Assembly Code Generator
+
+The task of generating assembly code involves using the obtained intermediate code, allocating registers based on a register allocation algorithm, and gradually transforming the intermediate code into assembly code.
+
+#### 3.4.1 Register Allocation and Deallocation
+
+During the process of register allocation, the following principles are considered:
+
+1. Preferably use a register exclusively occupied by variable B.
+2. Preferably use an available register.
+3. Preemptively use a non-available register.
+
+The register allocation algorithm is as follows (assuming the intermediate code is in the form A := B op C):
+
+1. If the current value of B is in a register R<sub>i</sub>, where RVALUE[R<sub>i</sub>] only contains B, and either B and A are the same identifier or the current value of B will not be referenced after executing the quadruple A := B op C, select R<sub>i</sub> as the required register R and proceed to step 4.
+2. If there are still unallocated registers, choose one (R_i) as the required register R and proceed to step 4.
+3. Choose a register R_i from the already allocated registers as the required register R. It is preferable to select R_i such that the variable occupying R_i has its value also stored in the variable's storage location or will not be referenced in the basic block until the distant future.
+4. Generate store instructions for the variables in R_i: If the address descriptor array AVALUE[V] for variable V indicates that V is also stored outside of register R, no store instruction is needed. If V is equal to A and not equal to B or C, no store instruction is needed. If V will not be used after this point, no store instruction is needed. Otherwise, generate the target code `ST R_i, V`.
